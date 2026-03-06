@@ -42,14 +42,14 @@ Et automatisert Bash-script som setter opp en komplett webserver med LAMP, Flask
 ### 1. Klon repoet (eller kopier scriptet til serveren)
 
 ```bash
-git clone https://github.com/USERNAME/REPO.git
+git clone https://github.com/marcusthy/LAMP.git
 cd REPO
 ```
 
 Eller kjør direkte fra GitHub:
 
 ```bash
-curl -s https://raw.githubusercontent.com/USERNAME/REPO/main/Setup.sh | bash
+curl -s https://raw.githubusercontent.com/marcusthy/LAMP/main/Setup.sh | bash
 ```
 
 ### 2. Gi scriptet kjøretillatelse
