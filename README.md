@@ -1,91 +1,85 @@
 # LAMP + Flask Login Setup Script
 
-Et automatisert Bash-script som setter opp en komplett webserver med LAMP, Flask og en ferdig login-side med hashed passord.
+Et automatisert Bash-script som setter opp en komplett webserver med LAMP, Flask og en ferdig login-side med hashed passord. Kjøres som root direkte i Proxmox-consolen – ingen manuell konfigurasjon nødvendig.
 
 ---
 
 ## Hva scriptet gjør
 
 1. **Oppdaterer systemet** – `apt update && apt upgrade`
-2. **Installerer LAMP + Python + WSGI**
+2. **Oppretter en ny systembruker** – med passord og `sudo`-rettigheter
+3. **Installerer LAMP + Python + WSGI**
    - Apache2, MySQL, PHP
-   - Python 3, pip, virtualenv (`python3.13-venv`)
+   - Python 3, pip, virtualenv (`python3-venv`, versjon oppdages automatisk)
    - `libapache2-mod-wsgi-py3`
-3. **Lager prosjektmappe** `/var/www/<prosjektnavn>` med riktige rettigheter
-4. **Setter opp virtualenv** og installerer:
+4. **Lager prosjektmappe** `/var/www/<prosjektnavn>` med riktige rettigheter
+5. **Setter opp virtualenv** og installerer:
    - Flask, Flask-WTF, mysql-connector-python, Werkzeug
-5. **Konfigurerer MySQL** – starter tjenesten, lager database og tabell (`brukere`)
-6. **Lager `app.py`** med disse rutene:
+6. **Sikrer og konfigurerer MySQL** – setter root-passord, fjerner anonyme brukere og test-DB, lager database, tabell (`brukere`) og Flask-bruker
+7. **Lager `app.py`** med disse rutene:
    - `/` – Forside med lenker til registrer/logg inn
    - `/register` – Registrer ny bruker (passord lagres hashet)
    - `/login` – Logg inn (passord sjekkes mot hash i databasen)
    - `/welcome` – Velkomstside for innloggede brukere
-7. **Lager `forms.py`** med `RegisterForm` og `LoginForm` (Flask-WTF)
-8. **Lager HTML-templates**: `base.html`, `index.html`, `register.html`, `login.html`, `welcome.html`
-9. **Lager `app.wsgi`** som kobler Flask-appen til Apache via WSGI
-10. **Konfigurerer Apache VirtualHost** med WSGI og aktiverer siden
-11. **Setter rettigheter** – mapper: 755, filer: 644, env: g+rx
-12. **Åpner brannmur** for Apache med UFW og restarter Apache
+8. **Lager `forms.py`** med `RegisterForm` og `LoginForm` (Flask-WTF)
+9. **Lager HTML-templates**: `base.html`, `index.html`, `register.html`, `login.html`, `welcome.html`
+10. **Lager `app.wsgi`** som kobler Flask-appen til Apache via WSGI
+11. **Konfigurerer Apache VirtualHost** med WSGI og aktiverer siden
+12. **Setter rettigheter** – mapper: 755, filer: 644, env: g+rx
+13. **Aktiverer UFW-brannmur** for Apache og restarter Apache
 
 ---
 
 ## Krav
 
-- Ubuntu/Debian-basert server
-- `sudo`-tilgang
+- Ubuntu/Debian-basert server (f.eks. Proxmox CT med Ubuntu)
+- Kjøres som **root**
 - Internett-tilgang for pakkeinstallasjon
 
 ---
 
 ## Bruk
 
-### 1. Klon repoet (eller kopier scriptet til serveren)
+### Kjør direkte fra Proxmox-consolen (som root)
+
+`curl` er ikke pre-installert på ferske Ubuntu CT-er. Installer det først og kjør scriptet i én kommando:
 
 ```bash
-git clone https://github.com/marcusthy/LAMP.git
-cd REPO
+apt install curl -y && curl -sO https://raw.githubusercontent.com/marcusthy/LAMP/main/Setup.sh && bash Setup.sh
 ```
 
-Eller kjør direkte fra GitHub:
+Det er alt. Scriptet gjør resten automatisk.
 
-```bash
-curl -s https://raw.githubusercontent.com/marcusthy/LAMP/main/Setup.sh | bash
-```
-
-### 2. Gi scriptet kjøretillatelse
-
-```bash
-chmod +x Setup.sh
-```
-
-### 3. Kjør scriptet
-
-```bash
-./Setup.sh
-```
-
-### 4. Svar på spørsmålene
+### Svar på spørsmålene
 
 Scriptet spør om følgende ved oppstart:
 
 | Spørsmål | Eksempel |
 |---|---|
+| Brukernavn for ny server-bruker | `marcus` |
+| Passord for ny server-bruker | `passord123` |
 | Prosjektnavn / domene | `minside` |
 | MySQL root-passord | `root123` |
 | Navn på Flask DB-bruker | `flaskuser` |
-| Passord for Flask DB-bruker | `passord123` |
+| Passord for Flask DB-bruker | `dbpassord123` |
 
 ---
 
 ## Etter at scriptet er ferdig
 
-Åpne nettleseren og gå til:
+Scriptet skriver ut serverens IP-adresse og SSH-kommando på slutten. Åpne nettleseren og gå til:
 
 ```
 http://<serverens IP-adresse>
 ```
 
 Du vil se forsiden med lenker til **Registrer** og **Logg inn**.
+
+Du kan også SSH inn på serveren med den nye brukeren:
+
+```bash
+ssh <brukernavn>@<serverens IP-adresse>
+```
 
 ---
 
