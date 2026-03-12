@@ -1,8 +1,29 @@
 #!/bin/bash
 
+# Krev root
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Error: Run this script as root."
+    echo "  sudo bash Setup.sh"
+    exit 1
+fi
+
 echo "=============================="
 echo "   Web Server Setup Script"
 echo "=============================="
+
+# Spør etter ny system-bruker
+read -p "Enter username for new server user: " NEW_USER
+if [ -z "$NEW_USER" ]; then
+  echo "Error: Username cannot be empty!"
+  exit 1
+fi
+
+read -sp "Enter password for $NEW_USER: " NEW_USER_PASS
+echo
+if [ -z "$NEW_USER_PASS" ]; then
+  echo "Error: Password cannot be empty!"
+  exit 1
+fi
 
 # Spør etter prosjektnavn / domain
 read -p "Enter your project name / domain (e.g. myapp): " DOMAIN
@@ -17,29 +38,42 @@ read -p "Enter a name for the Flask DB user: " DB_USER
 read -p "Enter password for Flask DB user: " DB_PASS
 
 echo ""
-echo "Project: $DOMAIN"
+echo "New user: $NEW_USER"
+echo "Project:  $DOMAIN"
 echo ""
 
 # ─── 1. Oppdater system ───────────────────────────────────────────────────────
-echo "[1/9] Updating system..."
-sudo apt update && sudo apt upgrade -y
+echo "[1/10] Updating system..."
+apt update && apt upgrade -y
 
-# ─── 2. Installer LAMP + Python + WSGI ───────────────────────────────────────
-echo "[2/9] Installing LAMP + Python3 + WSGI..."
-sudo apt install -y \
+# ─── 2. Lag system-bruker ────────────────────────────────────────────────────
+echo "[2/10] Creating system user '$NEW_USER'..."
+if id "$NEW_USER" &>/dev/null; then
+    echo "  User $NEW_USER already exists, skipping."
+else
+    useradd -m -s /bin/bash "$NEW_USER"
+    printf '%s:%s\n' "$NEW_USER" "$NEW_USER_PASS" | chpasswd
+    usermod -aG sudo "$NEW_USER"
+    echo "  User $NEW_USER created and added to sudo group."
+fi
+
+# ─── 3. Installer LAMP + Python + WSGI ───────────────────────────────────────
+echo "[3/10] Installing LAMP + Python3 + WSGI..."
+apt install -y \
   apache2 \
   mysql-server \
   php libapache2-mod-php php-mysql \
-  python3 python3-pip python3.13-venv \
+  python3 python3-pip python3-venv \
   libapache2-mod-wsgi-py3
 
-sudo a2enmod wsgi
+a2enmod wsgi
 
-# ─── 3. Lag web-mappe og virtualenv ──────────────────────────────────────────
-echo "[3/9] Creating project directory and virtualenv..."
-sudo mkdir -p /var/www/$DOMAIN
-sudo chown -R $USER:www-data /var/www/$DOMAIN
-sudo chmod -R 755 /var/www/$DOMAIN
+# ─── 4. Lag web-mappe og virtualenv ──────────────────────────────────────────
+echo "[4/10] Creating project directory and virtualenv..."
+PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+mkdir -p /var/www/$DOMAIN
+chown -R $NEW_USER:www-data /var/www/$DOMAIN
+chmod -R 755 /var/www/$DOMAIN
 
 cd /var/www/$DOMAIN
 python3 -m venv env
@@ -50,11 +84,21 @@ pip install flask mysql-connector-python flask-wtf werkzeug
 
 deactivate
 
-# ─── 4. MySQL: start, lag database og tabell ─────────────────────────────────
-echo "[4/9] Configuring MySQL database..."
-sudo systemctl start mysql
+# ─── 5. MySQL: sikre og konfigurer database ─────────────────────────────────
+echo "[5/10] Configuring MySQL database..."
+systemctl start mysql
 
-sudo mysql -u root -p"$MYSQL_ROOT_PASS" <<SQL
+# Sett root-passord og sikre installasjonen (erstatter mysql_secure_installation)
+mysql -u root <<SQLSECURE
+ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_ROOT_PASS';
+DELETE FROM mysql.user WHERE User='';
+DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
+DROP DATABASE IF EXISTS test;
+DELETE FROM mysql.db WHERE Db='test' OR Db='test_%';
+FLUSH PRIVILEGES;
+SQLSECURE
+
+mysql -u root -p"$MYSQL_ROOT_PASS" <<SQL
 CREATE DATABASE IF NOT EXISTS ${DOMAIN//-/_}_db;
 CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS';
 GRANT ALL PRIVILEGES ON ${DOMAIN//-/_}_db.* TO '$DB_USER'@'localhost';
@@ -71,8 +115,8 @@ SQL
 
 DB_NAME="${DOMAIN//-/_}_db"
 
-# ─── 5. Lag app.py ────────────────────────────────────────────────────────────
-echo "[5/9] Creating app.py..."
+# ─── 6. Lag app.py ────────────────────────────────────────────────────────────
+echo "[6/10] Creating app.py..."
 cat > /var/www/$DOMAIN/app.py <<PYEOF
 from flask import Flask, render_template, redirect, session
 from forms import RegisterForm, LoginForm
@@ -157,8 +201,8 @@ if __name__ == "__main__":
     app.run()
 PYEOF
 
-# ─── 6. Lag forms.py ──────────────────────────────────────────────────────────
-echo "[6/9] Creating forms.py..."
+# ─── 7. Lag forms.py ──────────────────────────────────────────────────────────
+echo "[7/10] Creating forms.py..."
 cat > /var/www/$DOMAIN/forms.py <<PYEOF
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField
@@ -177,8 +221,8 @@ class LoginForm(FlaskForm):
     submit = SubmitField("Logg inn")
 PYEOF
 
-# ─── 7. Lag HTML templates ────────────────────────────────────────────────────
-echo "[7/9] Creating HTML templates..."
+# ─── 8. Lag HTML templates ────────────────────────────────────────────────────
+echo "[8/10] Creating HTML templates..."
 mkdir -p /var/www/$DOMAIN/templates
 
 cat > /var/www/$DOMAIN/templates/base.html <<'HTML'
@@ -247,14 +291,14 @@ cat > /var/www/$DOMAIN/templates/welcome.html <<'HTML'
 {% endblock %}
 HTML
 
-# ─── 8. Lag app.wsgi ──────────────────────────────────────────────────────────
-echo "[8/9] Creating app.wsgi..."
+# ─── 9. Lag app.wsgi ──────────────────────────────────────────────────────────
+echo "[9/10] Creating app.wsgi..."
 cat > /var/www/$DOMAIN/app.wsgi <<WSGIEOF
 import sys
 import site
 import os
 
-site.addsitedir('/var/www/$DOMAIN/env/lib/python3.13/site-packages')
+site.addsitedir('/var/www/$DOMAIN/env/lib/python$PYTHON_VERSION/site-packages')
 
 sys.path.insert(0, '/var/www/$DOMAIN')
 
@@ -266,10 +310,10 @@ os.environ['PATH'] = '/var/www/$DOMAIN/env/bin:' + os.environ['PATH']
 from app import app as application
 WSGIEOF
 
-# ─── 9. Apache VirtualHost med WSGI ──────────────────────────────────────────
-echo "[9/9] Creating Apache VirtualHost with WSGI..."
+# ─── 10. Apache VirtualHost med WSGI ────────────────────────────────────────
+echo "[10/10] Creating Apache VirtualHost with WSGI..."
 
-sudo bash -c "cat > /etc/apache2/sites-available/$DOMAIN.conf <<EOL
+cat > /etc/apache2/sites-available/$DOMAIN.conf <<EOL
 <VirtualHost *:80>
     ServerName $DOMAIN
     ServerAlias www.$DOMAIN
@@ -287,30 +331,36 @@ sudo bash -c "cat > /etc/apache2/sites-available/$DOMAIN.conf <<EOL
     ErrorLog \${APACHE_LOG_DIR}/$DOMAIN-error.log
     CustomLog \${APACHE_LOG_DIR}/$DOMAIN-access.log combined
 </VirtualHost>
-EOL"
+EOL
 
 # Sett fil-rettigheter
-sudo find /var/www/$DOMAIN -type d -exec chmod 755 {} \;
-sudo find /var/www/$DOMAIN -type f -exec chmod 644 {} \;
-sudo chmod -R g+rx /var/www/$DOMAIN/env
+find /var/www/$DOMAIN -type d -exec chmod 755 {} \;
+find /var/www/$DOMAIN -type f -exec chmod 644 {} \;
+chmod -R g+rx /var/www/$DOMAIN/env
 
 # Aktiver site og restart Apache
-sudo a2dissite 000-default.conf 2>/dev/null || true
-sudo a2ensite $DOMAIN.conf
-sudo apache2ctl configtest
-sudo systemctl restart apache2
+a2dissite 000-default.conf 2>/dev/null || true
+a2ensite $DOMAIN.conf
+apache2ctl configtest
+systemctl restart apache2
 
 # Brannmur
-sudo ufw allow 'Apache'
-sudo ufw status
+ufw allow 'Apache'
+ufw --force enable
+
+SERVER_IP=$(hostname -I | awk '{print $1}')
 
 echo ""
 echo "======================================="
 echo " Setup Complete!"
 echo "---------------------------------------"
+echo " New user:  $NEW_USER"
 echo " Project:   $DOMAIN"
 echo " Web root:  /var/www/$DOMAIN"
 echo " Database:  $DB_NAME"
 echo " DB user:   $DB_USER"
-echo " Visit:     http://$DOMAIN"
+echo " Python:    $PYTHON_VERSION"
+echo "---------------------------------------"
+echo " Visit:     http://$SERVER_IP"
+echo " SSH:       ssh $NEW_USER@$SERVER_IP"
 echo "======================================="
