@@ -344,10 +344,6 @@ a2ensite $DOMAIN.conf
 apache2ctl configtest
 systemctl restart apache2
 
-# Brannmur
-ufw allow 'Apache'
-ufw --force enable
-
 SERVER_IP=$(hostname -I | awk '{print $1}')
 
 echo ""
