@@ -83,6 +83,54 @@ ssh <brukernavn>@<serverens IP-adresse>
 
 ---
 
+## Database-oppsett
+
+Scriptet setter opp MySQL automatisk som en del av steg 5.
+
+### Database og bruker
+
+| Parameter | Verdi |
+|---|---|
+| Databasenavn | `<prosjektnavn>_db` (bindestreker erstattes med `_`) |
+| Vert | `localhost` |
+| DB-bruker | Valgfritt navn (oppgis ved kjøring av scriptet) |
+| DB-passord | Valgfritt passord (oppgis ved kjøring av scriptet) |
+
+DB-brukeren får fulle rettigheter (`GRANT ALL PRIVILEGES`) kun på prosjektets database.
+
+### Tabell: `brukere`
+
+```sql
+CREATE TABLE IF NOT EXISTS brukere (
+    bruker_id  INT          PRIMARY KEY AUTO_INCREMENT,
+    navn       VARCHAR(255),
+    brukernavn VARCHAR(255) UNIQUE,
+    passord    VARCHAR(255),
+    adresse    VARCHAR(255)
+);
+```
+
+| Kolonne | Type | Beskrivelse |
+|---|---|---|
+| `bruker_id` | INT, AUTO_INCREMENT | Primærnøkkel |
+| `navn` | VARCHAR(255) | Fullt navn på brukeren |
+| `brukernavn` | VARCHAR(255), UNIQUE | Påloggingsnavn (må være unikt) |
+| `passord` | VARCHAR(255) | Bcrypt-hash via Werkzeug (`generate_password_hash`) |
+| `adresse` | VARCHAR(255) | Adresse |
+
+### Passord-håndtering
+
+Passord lagres **aldri i klartekst**. Ved registrering brukes `werkzeug.security.generate_password_hash()`, og ved innlogging sjekkes passordet mot hashen med `check_password_hash()`.
+
+### Sikkerhetstiltak ved oppsett
+
+- Root-passordet settes eksplisitt
+- Anonyme MySQL-brukere fjernes
+- Test-databasen slettes
+- Root-tilgang begrenses til `localhost`
+
+---
+
 ## Mappestruktur som lages
 
 ```
