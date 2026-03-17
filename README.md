@@ -26,7 +26,6 @@ Et automatisert Bash-script som setter opp en komplett webserver med LAMP, Flask
 10. **Lager `app.wsgi`** som kobler Flask-appen til Apache via WSGI
 11. **Konfigurerer Apache VirtualHost** med WSGI og aktiverer siden
 12. **Setter rettigheter** – mapper: 755, filer: 644, env: g+rx
-13. **Aktiverer UFW-brannmur** for Apache og restarter Apache
 
 ---
 
